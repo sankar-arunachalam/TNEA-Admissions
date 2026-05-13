@@ -47,8 +47,8 @@ st.set_page_config(
     },
 )
 
-MAX_MARK = 200
-MIN_MARK = 0
+MAX_MARK = 200.0
+MIN_MARK = 0.0
 MODES = ["safe", "match", "reach", "custom"]
 DEFAULT_MODE = "match"
 
@@ -90,13 +90,56 @@ def _stats(_long_mtime_ns: int, _master_mtime_ns: int) -> dict:
 # ----------------------------------------------------------------------------
 # Query-param plumbing (deep links)
 # ----------------------------------------------------------------------------
-def _qp_get_int(key: str, default: int, lo: int, hi: int) -> int:
-    raw = st.query_params.get(key, str(default))
+def _qp_get_optional_float(key: str, lo: float, hi: float) -> float | None:
+    """Parse ``key`` from query params; missing or invalid → ``None``."""
+    if key not in st.query_params:
+        return None
+    raw = st.query_params.get(key, "")
+    if raw is None or str(raw).strip() == "":
+        return None
     try:
-        val = int(float(raw))
+        v = float(raw)
     except (ValueError, TypeError):
-        val = default
-    return max(lo, min(hi, val))
+        return None
+    return max(lo, min(hi, v))
+
+
+def _qp_get_category_init() -> str:
+    raw = str(st.query_params.get("cat", "")).strip()
+    return raw if raw in CATEGORIES else ""
+
+
+def _qp_get_year_init() -> str:
+    raw = str(st.query_params.get("year", "")).strip()
+    return raw if raw in (str(y) for y in YEARS) else ""
+
+
+def _fmt_num_param(x: float) -> str:
+    """Compact string for URL / WhatsApp (drops trailing zeros)."""
+    xf = float(x)
+    if abs(xf - round(xf)) < 1e-9:
+        return str(int(round(xf)))
+    s = f"{xf:.6f}".rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
+def _mark_for_display(m: float | int) -> str:
+    return _fmt_num_param(float(m))
+
+
+def _filters_ready(
+    mode: str,
+    mark: float | None,
+    category: str,
+    year_val: int | None,
+    range_lo: float | None,
+    range_hi: float | None,
+) -> bool:
+    if category not in CATEGORIES or year_val is None:
+        return False
+    if mode == "custom":
+        return range_lo is not None and range_hi is not None
+    return mark is not None
 
 
 def _qp_get_str(key: str, default: str, allowed: list[str]) -> str:
@@ -212,6 +255,7 @@ def _reset_filters_preserve_language() -> None:
         lang_iso = _qp_get_str("lang", "en", ["en", "ta"])
     for k in _FILTER_WIDGET_KEYS:
         st.session_state.pop(k, None)
+    st.session_state.pop("show_all", None)
     st.query_params.clear()
     st.query_params["lang"] = lang_iso
 
@@ -219,14 +263,15 @@ def _reset_filters_preserve_language() -> None:
 # ----------------------------------------------------------------------------
 # Range presets
 # ----------------------------------------------------------------------------
-def _range_for_mode(mode: str, mark: int) -> tuple[int, int]:
+def _range_for_mode(mode: str, mark: float) -> tuple[float, float]:
     """Compute (lo, hi) cutoff range for a given Safe/Match/Reach mode."""
+    m = float(mark)
     if mode == "safe":
-        return (max(MIN_MARK, mark - 25), max(MIN_MARK, mark - 10))
+        return (max(MIN_MARK, m - 25), max(MIN_MARK, m - 10))
     if mode == "reach":
-        return (max(MIN_MARK, mark - 2), min(MAX_MARK, mark + 5))
+        return (max(MIN_MARK, m - 2), min(MAX_MARK, m + 5))
     # match (default)
-    return (max(MIN_MARK, mark - 10), min(MAX_MARK, mark))
+    return (max(MIN_MARK, m - 10), min(MAX_MARK, m))
 
 
 # ----------------------------------------------------------------------------
@@ -295,34 +340,46 @@ def main() -> None:
         )
 
     # ------- Core filters: one dense row (mark | community | year)
-    init_mark = _qp_get_int("mark", 180, MIN_MARK, MAX_MARK)
-    init_cat = _qp_get_str("cat", "OC", CATEGORIES)
-    init_year = _qp_get_int("year", 2025, min(YEARS), max(YEARS))
+    init_mark = _qp_get_optional_float("mark", MIN_MARK, MAX_MARK)
+    init_cat = _qp_get_category_init()
+    year_options = [""] + [str(y) for y in YEARS]
+    init_year_s = _qp_get_year_init()
     init_mode = _qp_get_str("mode", DEFAULT_MODE, MODES)
+    cat_options = [""] + CATEGORIES
 
     r1a, r1b, r1c = st.columns([1, 1.35, 0.85])
     with r1a:
-        mark = st.number_input(
+        mark_raw = st.number_input(
             t(lang, "your_mark"),
-            min_value=MIN_MARK, max_value=MAX_MARK,
-            value=init_mark, step=1, key="mark",
+            min_value=MIN_MARK,
+            max_value=MAX_MARK,
+            value=init_mark,
+            step=0.1,
+            format="%.2f",
+            placeholder=t(lang, "mark_placeholder"),
+            key="mark",
             label_visibility="visible",
         )
+    mark: float | None = None if mark_raw is None else float(mark_raw)
     with r1b:
         category = st.selectbox(
             t(lang, "your_category"),
-            options=CATEGORIES,
-            index=CATEGORIES.index(init_cat),
-            format_func=lambda c: CATEGORY_LABELS[lang][c],
+            options=cat_options,
+            index=cat_options.index(init_cat),
+            format_func=lambda c: (
+                t(lang, "choose_category") if c == "" else CATEGORY_LABELS[lang][c]
+            ),
             key="category",
         )
     with r1c:
-        year = st.selectbox(
+        year_str = st.selectbox(
             t(lang, "year_label"),
-            options=YEARS,
-            index=YEARS.index(init_year),
+            options=year_options,
+            index=year_options.index(init_year_s),
+            format_func=lambda y: t(lang, "choose_year") if y == "" else str(y),
             key="year",
         )
+    year_val: int | None = int(year_str) if year_str else None
 
     # ------- Mode + range: second row (segmented pills or radio)
     mode_labels = {m: t(lang, f"mode_{m}") for m in MODES}
@@ -345,41 +402,68 @@ def main() -> None:
             key="mode",
         )
 
+    range_lo: float | None
+    range_hi: float | None
     if mode == "custom":
-        init_lo = _qp_get_int("rmin", max(MIN_MARK, mark - 15), MIN_MARK, MAX_MARK)
-        init_hi = _qp_get_int("rmax", mark, MIN_MARK, MAX_MARK)
-        ilo, ihi = min(init_lo, init_hi), max(init_lo, init_hi)
+        init_lo = _qp_get_optional_float("rmin", MIN_MARK, MAX_MARK)
+        init_hi = _qp_get_optional_float("rmax", MIN_MARK, MAX_MARK)
         st.caption(t(lang, "range_label"))
         _rl, _rr = st.columns(2)
         with _rl:
             v_lo = st.number_input(
                 t(lang, "range_low"),
-                min_value=MIN_MARK, max_value=MAX_MARK,
-                value=ilo, step=1, key="range_lo_custom",
+                min_value=MIN_MARK,
+                max_value=MAX_MARK,
+                value=init_lo,
+                step=0.1,
+                format="%.2f",
+                placeholder=t(lang, "range_placeholder_lo"),
+                key="range_lo_custom",
                 label_visibility="visible",
             )
         with _rr:
             v_hi = st.number_input(
                 t(lang, "range_high"),
-                min_value=MIN_MARK, max_value=MAX_MARK,
-                value=ihi, step=1, key="range_hi_custom",
+                min_value=MIN_MARK,
+                max_value=MAX_MARK,
+                value=init_hi,
+                step=0.1,
+                format="%.2f",
+                placeholder=t(lang, "range_placeholder_hi"),
+                key="range_hi_custom",
                 label_visibility="visible",
             )
-        range_lo, range_hi = int(v_lo), int(v_hi)
-        if range_lo > range_hi:
-            range_lo, range_hi = range_hi, range_lo
-        st.caption(
-            t(lang, "range_help", year=int(year), cat=category)
-            + f" **{range_lo}–{range_hi}**"
-        )
+        range_lo = None if v_lo is None else float(v_lo)
+        range_hi = None if v_hi is None else float(v_hi)
+        if range_lo is not None and range_hi is not None:
+            if range_lo > range_hi:
+                range_lo, range_hi = range_hi, range_lo
+            ydisp = year_val if year_val is not None else "—"
+            cdisp = category if category in CATEGORIES else "—"
+            st.caption(
+                t(lang, "range_help", year=ydisp, cat=cdisp)
+                + f" **{_mark_for_display(range_lo)}–{_mark_for_display(range_hi)}**"
+            )
+        else:
+            st.caption(t(lang, "range_custom_need_both"))
     else:
-        range_lo, range_hi = _range_for_mode(mode, int(mark))
-        st.caption(
-            t(lang, f"mode_{mode}_help")
-            + " → "
-            + t(lang, "range_help", year=int(year), cat=category)
-            + f" **{range_lo}–{range_hi}**"
-        )
+        if mark is not None:
+            range_lo, range_hi = _range_for_mode(mode, mark)
+            ydisp = year_val if year_val is not None else "—"
+            cdisp = category if category in CATEGORIES else "—"
+            st.caption(
+                t(lang, f"mode_{mode}_help")
+                + " → "
+                + t(lang, "range_help", year=ydisp, cat=cdisp)
+                + f" **{_mark_for_display(range_lo)}–{_mark_for_display(range_hi)}**"
+            )
+        else:
+            range_lo, range_hi = None, None
+            st.caption(
+                t(lang, f"mode_{mode}_help")
+                + " → "
+                + t(lang, "mode_needs_mark"),
+            )
 
     # ------- Advanced filters (compact inside)
     with st.expander(t(lang, "advanced")):
@@ -430,29 +514,43 @@ def main() -> None:
                 key="group",
             )
 
-    # ------- Persist state in URL ---------------------------------------
-    qp = {
-        "mark": str(mark),
-        "cat": category,
-        "year": str(year),
-        "mode": mode,
+    # ------- Persist state in URL (only set fields — no surprise defaults) ---
+    qp: dict[str, str] = {
         "lang": lang,
+        "mode": mode,
         "ss": "1" if include_ss else "0",
         "group": "1" if group_by_college else "0",
     }
+    if mark is not None:
+        qp["mark"] = _fmt_num_param(mark)
+    if category in CATEGORIES:
+        qp["cat"] = category
+    if year_val is not None:
+        qp["year"] = str(year_val)
     if selected_branches:
         qp["branch"] = ",".join(selected_branches)
     if college_query:
         qp["q"] = college_query
-    if mode == "custom":
-        qp["rmin"] = str(range_lo)
-        qp["rmax"] = str(range_hi)
+    if (
+        mode == "custom"
+        and range_lo is not None
+        and range_hi is not None
+    ):
+        qp["rmin"] = _fmt_num_param(range_lo)
+        qp["rmax"] = _fmt_num_param(range_hi)
+    st.query_params.clear()
     st.query_params.update(qp)
+
+    st.markdown("---")
+    if not _filters_ready(mode, mark, category, year_val, range_lo, range_hi):
+        st.info(t(lang, "prompt_set_filters"))
+        _render_footer(lang, long_mtime, master_mtime)
+        return
 
     # ------- Search ------------------------------------------------------
     long = _load_long(long_mtime)
     results = find_colleges(
-        long, range_lo, range_hi, category, int(year),
+        long, range_lo, range_hi, category, year_val,
         branches=selected_branches or None,
         include_ss=include_ss,
         college_name_query=college_query or None,
@@ -462,10 +560,15 @@ def main() -> None:
     # (e.g. Safe with mark 85 → band 60–75 while OC-2025 never goes below ~77.5).
     # If so, fall back to "everything at or below your mark" when the user did not
     # narrow by branch or college name.
-    if len(results) == 0 and not selected_branches and not college_query:
-        hi_fb = min(int(mark), MAX_MARK)
+    if (
+        len(results) == 0
+        and not selected_branches
+        and not college_query
+        and mark is not None
+    ):
+        hi_fb = min(float(mark), MAX_MARK)
         alt = find_colleges(
-            long, MIN_MARK, hi_fb, category, int(year),
+            long, MIN_MARK, hi_fb, category, year_val,
             branches=None,
             include_ss=include_ss,
             college_name_query=None,
@@ -474,8 +577,11 @@ def main() -> None:
             st.info(
                 t(
                     lang, "result_fallback_band",
-                    lo=range_lo, hi=range_hi, cat=category,
-                    year=int(year), mark=int(mark),
+                    lo=_mark_for_display(range_lo),
+                    hi=_mark_for_display(range_hi),
+                    cat=category,
+                    year=year_val,
+                    mark=_mark_for_display(mark),
                 )
             )
             results = alt
@@ -483,11 +589,21 @@ def main() -> None:
     n_options = len(results)
     n_colleges = int(results["college_code"].nunique()) if n_options else 0
 
-    st.markdown("---")
     if n_options == 0:
         st.warning(t(lang, "result_empty"))
         _render_footer(lang, long_mtime, master_mtime)
         return
+
+    share_mark_str = (
+        _mark_for_display(mark)
+        if mark is not None
+        else t(
+            lang,
+            "share_mark_range",
+            lo=_mark_for_display(range_lo),
+            hi=_mark_for_display(range_hi),
+        )
+    )
 
     # ------- Single-branch context strip
     if len(selected_branches) == 1:
@@ -505,27 +621,34 @@ def main() -> None:
         st.subheader(
             t(lang, "result_header_grouped",
               n_colleges=n_colleges, n_options=n_options,
-              cat=category, year=int(year))
+              cat=category, year=year_val)
         )
     else:
         key = "result_header_one" if n_options == 1 else "result_header"
-        st.subheader(t(lang, key, n=n_options, cat=category, year=int(year)))
+        st.subheader(t(lang, key, n=n_options, cat=category, year=year_val))
 
     # ------- Top-of-results share buttons
-    share_my = t(lang, "share_text_my",
-                 mark=int(mark), cat=category, n=n_options, url=header_url)
     share_tool = t(
         lang, "share_text_tool",
         url=_resolve_public_base_url() or t(lang, "share_tool_url_fallback"),
     )
-    sc1, sc2 = st.columns(2)
-    with sc1:
-        st.link_button(
-            t(lang, "share_my_button"),
-            _wa_share_url(share_my),
-            width="stretch", type="primary",
-        )
-    with sc2:
+    if mark is not None:
+        share_my = t(lang, "share_text_my",
+                     mark=share_mark_str, cat=category, n=n_options, url=header_url)
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            st.link_button(
+                t(lang, "share_my_button"),
+                _wa_share_url(share_my),
+                width="stretch", type="primary",
+            )
+        with sc2:
+            st.link_button(
+                t(lang, "share_tool_button"),
+                _wa_share_url(share_tool),
+                width="stretch",
+            )
+    else:
         st.link_button(
             t(lang, "share_tool_button"),
             _wa_share_url(share_tool),
@@ -537,12 +660,12 @@ def main() -> None:
     st.caption(t(lang, "result_expand_hint"))
     if group_by_college:
         _render_grouped(
-            results, lang, category, int(year), int(mark),
+            results, lang, category, year_val, share_mark_str,
             header_url, hide_branch_per_card, long,
         )
     else:
         _render_flat(
-            results, lang, category, int(year), header_url,
+            results, lang, category, year_val, header_url,
             hide_branch_per_card, long,
         )
 
@@ -587,7 +710,7 @@ def _render_grouped(
     lang: str,
     category: str,
     year: int,
-    mark: int,
+    share_mark_str: str,
     share_url: str,
     hide_branch_per_card: bool,
     long: pd.DataFrame,
@@ -606,7 +729,7 @@ def _render_grouped(
 
     for idx, ((code, name), grp) in enumerate(view):
         _render_college_card(
-            code, name, grp, lang, category, year, mark, share_url,
+            code, name, grp, lang, category, year, share_mark_str, share_url,
             hide_branch_per_card, idx, long,
         )
 
@@ -658,7 +781,7 @@ def _render_college_card(
     lang: str,
     category: str,
     year: int,
-    mark: int,
+    share_mark_str: str,
     share_url: str,
     hide_branch_per_card: bool,
     group_idx: int,
@@ -719,7 +842,7 @@ def _render_college_card(
             chips_text += f" +{n_branches - 5}"
         share_text = t(
             lang, "share_text_college",
-            college=name[:80], n=n_branches, mark=mark, cat=category,
+            college=name[:80], n=n_branches, mark=share_mark_str, cat=category,
             branches=chips_text, url=share_url,
         )
         st.link_button(

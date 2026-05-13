@@ -35,6 +35,19 @@ T = {
         "tagline": "Find Tamil Nadu engineering colleges and branches you can get into — based on your TNEA cutoff.",
         "language_label": "Language",
         "your_mark": "Your TNEA mark (out of 200)",
+        "mark_placeholder": "e.g. 185.5",
+        "choose_category": "— Choose community —",
+        "choose_year": "— Choose year —",
+        "range_placeholder_lo": "Lower bound",
+        "range_placeholder_hi": "Upper bound",
+        "range_custom_need_both": "Enter **both** lower and upper cutoff to search in custom mode.",
+        "mode_needs_mark": "Enter your **mark** above (decimals allowed), or switch to **Custom range**.",
+        "prompt_set_filters": (
+            "Select your **community**, **year**, and a cutoff range: enter your **TNEA mark** "
+            "(decimals like 185.25 are allowed) for Safe / Match / Reach, **or** use **Custom range** "
+            "with lower and upper bounds. Results appear below once everything required is set."
+        ),
+        "share_mark_range": "{lo}–{hi}",
         "your_category": "Your community",
         "year_label": "Compare against year",
         "mode_label": "Show me",
@@ -133,6 +146,19 @@ T = {
         "tagline": "உங்கள் TNEA மதிப்பெண்ணுக்கு ஏற்ற தமிழ்நாடு பொறியியல் கல்லூரிகள் மற்றும் துறைகள்.",
         "language_label": "மொழி",
         "your_mark": "உங்கள் TNEA மதிப்பெண் (200-க்கு)",
+        "mark_placeholder": "எ.கா. 185.5",
+        "choose_category": "— சமூகத்தைத் தேர்ந்தெடுக்க —",
+        "choose_year": "— ஆண்டைத் தேர்ந்தெடுக்க —",
+        "range_placeholder_lo": "குறைந்த வரம்பு",
+        "range_placeholder_hi": "அதிக வரம்பு",
+        "range_custom_need_both": "தனிப்பயன் பயன்முறையில் தேட, **குறைந்த** மற்றும் **அதிக** கட்-ஆஃப் இரண்டையும் உள்ளிடவும்.",
+        "mode_needs_mark": "மேலே **மதிப்பெண்ணை** உள்ளிடவும் (தசமம் இடலாம்), அல்லது **தனிப்பயன் வரம்பு** வேண்டும்.",
+        "prompt_set_filters": (
+            "**சமூகம்**, **ஆண்டு** மற்றும் கட்-ஆஃப் வரம்பை அமைக்கவும்: பாதுகாப்பு/பொருத்தம்/முயற்சிக்கு **TNEA மதிப்பெண்** "
+            "(185.25 போல் தசமம் இடலாம்), அல்லது **தனிப்பயன் வரம்பு** மூலம் வரம்புகளைக் கொடுக்கவும். "
+            "தேவையானவை அமைந்ததும் முடிவுகள் கீழே தோன்றும்."
+        ),
+        "share_mark_range": "{lo}–{hi}",
         "your_category": "உங்கள் சமூகம்",
         "year_label": "எந்த ஆண்டுடன் ஒப்பிட",
         "mode_label": "காட்டவேண்டியது",

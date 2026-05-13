@@ -3,14 +3,20 @@
 Find Tamil Nadu engineering colleges and branches a student is eligible for,
 based on their TNEA cutoff mark and category.
 
+**Brought to you by [ValarHub](https://github.com/sankar-arunachalam)** (in-app: “From — ValarHub”).
+Anyone may **clone this repo** and run or deploy **their own** copy; the instructions below are for maintainers and contributors.
+
+<!-- Optional: put your Streamlit Cloud URL here for visitors -->
+<!-- **Live app:** https://YOUR-APP.streamlit.app -->
+
 - **3,906** college + branch combinations
 - **467** unique colleges
-- **97** unique engineering branches
+- **121** distinct course names in the branch filter (source `branch_raw`; canonical `branch_clean` count is lower)
 - **7** TNEA reservation categories: OC, BC, BCM, MBC, SC, SCA, ST
 - **5 years** of cutoffs: 2021–2025
 - Bilingual UI: English + தமிழ்
 - **Safe / Match / Reach / Custom** eligibility modes (counselling-style buckets)
-- **Cutoff range slider** — see exactly the band that fits your mark
+- **Custom range** — set **lower** and **higher** cutoff bounds with number inputs (no dual-handle slider)
 - **Grouped by college** — one card per college with branch chips; toggle for flat list
 - **College name search** — type "Anna", "Sairam", "Chennai" etc.
 - **All 7 communities' 5-year trends** in every result card
@@ -69,19 +75,16 @@ purchase required.
 
 ### One-time setup: make WhatsApp share links absolute
 
-The WhatsApp share buttons embed the app's URL. By default they use a
-relative URL (`?cutoff=180...`) which doesn't render as a clickable link
-inside WhatsApp messages. To fix that once your subdomain is chosen:
+Share buttons work best with a **full** `https://…` link inside WhatsApp. The app **infers** the base URL from the browser **when possible**; for reliability (and custom domains), set **`APP_URL`** once:
 
 1. In Streamlit Cloud, open your app → **Settings → Secrets**.
-2. Add this single line, replacing the URL with your actual app URL:
+2. Add this line with **your** real app URL:
 
    ```toml
-   APP_URL = "https://tnea-college-finder.streamlit.app"
+   APP_URL = "https://your-subdomain.streamlit.app"
    ```
 
-3. Save. The app picks it up automatically on next reload. WhatsApp messages
-   will now contain a fully-qualified link.
+3. Save and reload. Share messages will use this base for deep links and “share this tool.”
 
 ## Sharing the app on WhatsApp
 
@@ -99,10 +102,10 @@ phone with WhatsApp installed, no Meta Cloud API setup needed.
 
 ### Shareable URL state
 
-Every filter and toggle is encoded in the URL. A link like
+Every filter and toggle is encoded in the URL. A link like (replace host with yours)
 
 ```
-https://tnea-college-finder.streamlit.app/?mark=155&cat=BC&year=2025&mode=safe&lang=ta&branch=CSE,IT
+https://your-subdomain.streamlit.app/?mark=155&cat=BC&year=2025&mode=safe&lang=ta
 ```
 
 opens with the user's exact filter state pre-populated. Great for sharing
